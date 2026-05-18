@@ -1,0 +1,18 @@
+{
+  "permissions": {
+    "allow": [
+      "PowerShell(Get-ChildItem -Path \"c:\\\\laragon\\\\www\\\\taxi-bot\" -Force | Select-Object Name, @{Name=\"Type\"; Expression={if\\($_.PSIsContainer\\){\"DIR\"}else{\"FILE\"}}} | Format-Table -AutoSize)",
+      "PowerShell(Get-ChildItem -Path \"c:\\\\laragon\\\\www\\\\taxi-bot\\\\app\" -Recurse | Select-Object @{Name=\"Path\"; Expression={$_.FullName -replace [regex]::Escape\\(\"c:\\\\laragon\\\\www\\\\taxi-bot\\\\\"\\), \"\"}} | Format-Table -AutoSize -Wrap)",
+      "PowerShell(Get-ChildItem -Path \"c:\\\\laragon\\\\www\\\\taxi-bot\\\\storage\" -Recurse | Select-Object @{Name=\"Path\"; Expression={$_.FullName -replace [regex]::Escape\\(\"c:\\\\laragon\\\\www\\\\taxi-bot\\\\\"\\), \"\"}} | Format-Table -AutoSize)",
+      "PowerShell(Get-ChildItem -Path \"c:\\\\laragon\\\\www\\\\taxi-bot\\\\config\" -File | ForEach-Object { $_.Name })",
+      "PowerShell(Get-ChildItem -Path \"c:\\\\laragon\\\\www\\\\taxi-bot\\\\routes\" -File | ForEach-Object { $_.Name })",
+      "PowerShell(Get-ChildItem -Path \"c:\\\\laragon\\\\www\\\\taxi-bot\\\\app\\\\Http\\\\Controllers\" -File | ForEach-Object { $_.Name })",
+      "Bash(Get-Content \"c:\\\\laragon\\\\www\\\\taxi-bot\\\\storage\\\\logs\\\\laravel.log\" -Tail 50)",
+      "Bash(php -l app/Http/Controllers/BotWebhookController.php)",
+      "Bash(php -l app/Services/BotStateService.php)",
+      "Bash(php -l app/Services/TelegramSenderService.php)",
+      "Bash(php -l app/Console/Commands/BotRunCommand.php)",
+      "Bash(php -l app/Console/Commands/SetWebhookCommand.php)"
+    ]
+  }
+}
