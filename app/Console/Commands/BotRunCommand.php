@@ -18,29 +18,61 @@ class BotRunCommand extends Command
         TemplateService $templateService,
         TelegramSenderService $sender
     ): int {
-        $this->info('Bot runner started.');
+        $this->info('Bot runner started. To\'xtatish uchun Ctrl+C bosing.');
+
+        $lastActive = null;
 
         while (true) {
-            $state     = $stateService->getState();
-            $interval  = max(5, (int) ($state['interval'] ?? 30));
-            $templates = $templateService->all();
-            $count     = count($templates);
+            $state          = $stateService->getState();
+            $templates      = $templateService->all();
+            $count          = count($templates);
+            $activeGroupIds = $state['active_group_ids'] ?? [];
+            $isActive       = (bool) $state['is_active'] && $count > 0 && !empty($activeGroupIds);
+            $interval       = max(5, (int) ($state['interval'] ?? 30));
 
-            if ($state['is_active'] && $count > 0) {
-                $index     = $count > 0 ? ((int) $state['last_template_index']) % $count : 0;
-                $nextIndex = ($index + 1) % $count;
-
-                try {
-                    $sender->sendToGroup($templates[$index]);
-                    $stateService->updateAfterSend($nextIndex);
-                    $this->line('[' . now()->format('H:i:s') . '] Sent template #' . ($index + 1));
-                } catch (\Throwable $e) {
-                    $this->error('[' . now()->format('H:i:s') . '] Send failed: ' . $e->getMessage());
-                    Log::error('bot:run send error', ['message' => $e->getMessage()]);
-                }
+            if ($lastActive !== $isActive) {
+                $lastActive = $isActive;
+                $label = $isActive
+                    ? "🟢 Bot faol — har {$interval}s da " . count($activeGroupIds) . " ta guruhga yuboradi"
+                    : '🔴 Bot to\'xtatilgan — /start buyrug\'ini kuting';
+                $this->line('[' . now()->format('H:i:s') . "] {$label}");
             }
 
-            sleep($interval);
+            if ($isActive) {
+                $index = ((int) $state['last_template_index']) % $count;
+                $text  = $templates[$index];
+                $num   = $index + 1;
+                $sent  = 0;
+
+                $adminId = (string) env('TELEGRAM_ADMIN_ID');
+
+                foreach ($activeGroupIds as $groupId) {
+                    try {
+                        $sender->send((string) $groupId, $text);
+                        $sent++;
+                    } catch (\Throwable $e) {
+                        $this->error('[' . now()->format('H:i:s') . "] ❌ {$groupId}: " . $e->getMessage());
+                        Log::error('bot:run send error', ['group' => $groupId, 'message' => $e->getMessage()]);
+
+                        try {
+                            $sender->send($adminId, "⚠️ Guruhga yuborib bo'lmadi:\n<code>{$groupId}</code>\n❌ " . $e->getMessage());
+                        } catch (\Throwable) {}
+                    }
+                }
+
+                if ($sent > 0) {
+                    $stateService->recordSend();
+                    $this->line(
+                        '[' . now()->format('H:i:s') . "] "
+                        . "✅ Shablon #{$num} {$sent} ta guruhga yuborildi. "
+                        . "Keyingisi {$interval}s dan so'ng."
+                    );
+                }
+
+                sleep($interval);
+            } else {
+                sleep(5);
+            }
         }
     }
 }

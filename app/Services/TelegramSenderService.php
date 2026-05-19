@@ -10,7 +10,7 @@ class TelegramSenderService
 {
     private Api $telegram;
 
-    public function __construct(private readonly BotStateService $stateService)
+    public function __construct()
     {
         $guzzle     = new GuzzleClient(['timeout' => 10.0]);
         $httpClient = new GuzzleHttpClient($guzzle);
@@ -23,27 +23,7 @@ class TelegramSenderService
     }
 
     /**
-     * Send a message to the group chat saved in bot state.
-     *
-     * @throws \RuntimeException When the bot has not been added to any group yet.
-     */
-    public function sendToGroup(string $text): void
-    {
-        $groupChatId = $this->stateService->getGroupChatId();
-
-        if (!$groupChatId) {
-            throw new \RuntimeException('Bot has not been added to any group yet.');
-        }
-
-        $this->telegram->sendMessage([
-            'chat_id'    => $groupChatId,
-            'text'       => $text,
-            'parse_mode' => 'HTML',
-        ]);
-    }
-
-    /**
-     * Send a plain HTML message to any chat, optionally with an inline keyboard.
+     * Send an HTML message to any chat, optionally with an inline keyboard.
      */
     public function send(string $chatId, string $text, ?array $replyMarkup = null): void
     {
@@ -80,7 +60,7 @@ class TelegramSenderService
     }
 
     /**
-     * Acknowledge a callback query to dismiss the loading indicator on the button.
+     * Acknowledge a callback query to dismiss the loading indicator.
      */
     public function answerCallback(string $callbackQueryId): void
     {
