@@ -1,6 +1,6 @@
 <?php
 
-namespace App\Services;
+namespace App\Services\Telegram;
 
 use GuzzleHttp\Client as GuzzleClient;
 use Telegram\Bot\Api;
@@ -8,23 +8,14 @@ use Telegram\Bot\HttpClients\GuzzleHttpClient;
 
 class TelegramSenderService
 {
-    private Api $telegram;
+    private Api $api;
 
-    public function __construct()
+    public function __construct(string $token)
     {
-        $guzzle     = new GuzzleClient(['timeout' => 10.0]);
-        $httpClient = new GuzzleHttpClient($guzzle);
-
-        $this->telegram = new Api(
-            config('telegram.bots.mybot.token'),
-            false,
-            $httpClient
-        );
+        $guzzle    = new GuzzleClient(['timeout' => 10.0]);
+        $this->api = new Api($token, false, new GuzzleHttpClient($guzzle));
     }
 
-    /**
-     * Send an HTML message to any chat, optionally with an inline keyboard.
-     */
     public function send(string $chatId, string $text, ?array $replyMarkup = null): void
     {
         $params = [
@@ -37,12 +28,9 @@ class TelegramSenderService
             $params['reply_markup'] = json_encode($replyMarkup);
         }
 
-        $this->telegram->sendMessage($params);
+        $this->api->sendMessage($params);
     }
 
-    /**
-     * Edit an existing message's text and inline keyboard in-place.
-     */
     public function editMessage(string $chatId, int $messageId, string $text, ?array $replyMarkup = null): void
     {
         $params = [
@@ -56,22 +44,20 @@ class TelegramSenderService
             $params['reply_markup'] = json_encode($replyMarkup);
         }
 
-        $this->telegram->editMessageText($params);
+        $this->api->editMessageText($params);
     }
 
-    /**
-     * Acknowledge a callback query to dismiss the loading indicator.
-     */
-    public function answerCallback(string $callbackQueryId): void
+    public function answerCallback(string $callbackQueryId, string $text = ''): void
     {
-        $this->telegram->answerCallbackQuery(['callback_query_id' => $callbackQueryId]);
+        $params = ['callback_query_id' => $callbackQueryId];
+        if ($text !== '') {
+            $params['text'] = $text;
+        }
+        $this->api->answerCallbackQuery($params);
     }
 
-    /**
-     * Expose the underlying Telegram Bot API instance.
-     */
     public function getApi(): Api
     {
-        return $this->telegram;
+        return $this->api;
     }
 }

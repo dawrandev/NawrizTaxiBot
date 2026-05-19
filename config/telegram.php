@@ -30,6 +30,8 @@ return [
     |                       Acme\Project\Commands\BotFather\ByeCommand::class,
     |             ]
     */
+    'master_token' => env('MASTER_BOT_TOKEN'),
+
     'bots' => [
         'mybot' => [
             'token' => env('TELEGRAM_BOT_TOKEN', 'YOUR-BOT-TOKEN'),

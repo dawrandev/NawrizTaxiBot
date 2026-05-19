@@ -2,77 +2,90 @@
 
 namespace App\Console\Commands;
 
-use App\Services\BotStateService;
-use App\Services\TemplateService;
-use App\Services\TelegramSenderService;
+use App\Models\DriverBot;
+use App\Services\Telegram\TelegramClientFactory;
 use Illuminate\Console\Command;
 use Illuminate\Support\Facades\Log;
 
 class BotRunCommand extends Command
 {
     protected $signature   = 'bot:run';
-    protected $description = 'Start the Telegram bot message sender (runs continuously)';
+    protected $description = 'Run the multi-bot message sender (runs continuously)';
 
-    public function handle(
-        BotStateService $stateService,
-        TemplateService $templateService,
-        TelegramSenderService $sender
-    ): int {
-        $this->info('Bot runner started. To\'xtatish uchun Ctrl+C bosing.');
-
-        $lastActive = null;
+    public function handle(TelegramClientFactory $factory): int
+    {
+        $this->info('Бот запущен. Для остановки нажмите Ctrl+C.');
 
         while (true) {
-            $state          = $stateService->getState();
-            $templates      = $templateService->all();
-            $count          = count($templates);
-            $activeGroupIds = $state['active_group_ids'] ?? [];
-            $isActive       = (bool) $state['is_active'] && $count > 0 && !empty($activeGroupIds);
-            $interval       = max(5, (int) ($state['interval'] ?? 30));
+            $bots = DriverBot::where('is_active', true)
+                ->with(['currentTemplate', 'activeGroups'])
+                ->get();
 
-            if ($lastActive !== $isActive) {
-                $lastActive = $isActive;
-                $label = $isActive
-                    ? "🟢 Bot faol — har {$interval}s da " . count($activeGroupIds) . " ta guruhga yuboradi"
-                    : '🔴 Bot to\'xtatilgan — /start buyrug\'ini kuting';
-                $this->line('[' . now()->format('H:i:s') . "] {$label}");
+            if ($bots->isEmpty()) {
+                sleep(30);
+                continue;
             }
 
-            if ($isActive) {
-                $index = ((int) $state['last_template_index']) % $count;
-                $text  = $templates[$index];
-                $num   = $index + 1;
-                $sent  = 0;
+            $minSleep = 5;
 
-                $adminId = (string) env('TELEGRAM_ADMIN_ID');
+            foreach ($bots as $bot) {
+                $interval = max(5, $bot->interval);
+                $lastSent = $bot->last_sent_at;
+                $elapsed  = $lastSent ? (int) $lastSent->diffInSeconds(now()) : $interval;
 
-                foreach ($activeGroupIds as $groupId) {
+                if ($elapsed < $interval) {
+                    $remaining = $interval - $elapsed;
+                    $this->line('[' . now()->format('H:i:s') . "] [{$bot->name}] ⏳ {$elapsed}s/{$interval}s — {$remaining}s qoldi");
+                    if ($remaining < $minSleep) {
+                        $minSleep = $remaining;
+                    }
+                    continue;
+                }
+
+                $template = $bot->currentTemplate;
+                $groups   = $bot->activeGroups;
+
+                if (!$template) {
+                    $this->warn('[' . now()->format('H:i:s') . "] [{$bot->name}] ⚠️ Шаблон не найден (current_template_id={$bot->current_template_id})");
+                    continue;
+                }
+
+                if ($groups->isEmpty()) {
+                    $this->warn('[' . now()->format('H:i:s') . "] [{$bot->name}] ⚠️ Нет активных групп");
+                    continue;
+                }
+
+                $this->line('[' . now()->format('H:i:s') . "] [{$bot->name}] 📤 Отправка в {$groups->count()} групп...");
+
+                $sender = $factory->make($bot->bot_token);
+                $sent   = 0;
+
+                foreach ($groups as $group) {
                     try {
-                        $sender->send((string) $groupId, $text);
+                        $sender->send($group->group_chat_id, $template->body);
                         $sent++;
+                        $this->line('[' . now()->format('H:i:s') . "] [{$bot->name}] ✅ → {$group->displayTitle()}");
                     } catch (\Throwable $e) {
-                        $this->error('[' . now()->format('H:i:s') . "] ❌ {$groupId}: " . $e->getMessage());
-                        Log::error('bot:run send error', ['group' => $groupId, 'message' => $e->getMessage()]);
-
+                        $msg = $e->getMessage();
+                        $this->error('[' . now()->format('H:i:s') . "] [{$bot->name}] ❌ {$group->displayTitle()}: {$msg}");
+                        Log::error('bot:run send error', [
+                            'bot'   => $bot->name,
+                            'group' => $group->group_chat_id,
+                            'error' => $msg,
+                        ]);
                         try {
-                            $sender->send($adminId, "⚠️ Guruhga yuborib bo'lmadi:\n<code>{$groupId}</code>\n❌ " . $e->getMessage());
+                            $sender->send($bot->chat_id, "⚠️ Не удалось отправить в группу: <b>{$group->displayTitle()}</b>\n❌ {$msg}");
                         } catch (\Throwable) {}
                     }
                 }
 
                 if ($sent > 0) {
-                    $stateService->recordSend();
-                    $this->line(
-                        '[' . now()->format('H:i:s') . "] "
-                        . "✅ Shablon #{$num} {$sent} ta guruhga yuborildi. "
-                        . "Keyingisi {$interval}s dan so'ng."
-                    );
+                    $bot->update(['last_sent_at' => now()]);
+                    $this->info('[' . now()->format('H:i:s') . "] [{$bot->name}] ✅ {$sent}/{$groups->count()} групп. След.: {$interval}с");
                 }
-
-                sleep($interval);
-            } else {
-                sleep(5);
             }
+
+            sleep(max(1, $minSleep));
         }
     }
 }
