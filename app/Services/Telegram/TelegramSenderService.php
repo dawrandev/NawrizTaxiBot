@@ -14,7 +14,7 @@ class TelegramSenderService
     {
         $config = ['timeout' => 30.0];
 
-        $proxy = getenv('https_proxy') ?: getenv('HTTPS_PROXY') ?: getenv('http_proxy');
+        $proxy = env('TELEGRAM_PROXY') ?: getenv('https_proxy') ?: getenv('HTTPS_PROXY');
         if ($proxy) {
             $config['proxy'] = ['http' => $proxy, 'https' => $proxy];
         }
