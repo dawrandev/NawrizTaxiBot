@@ -12,14 +12,7 @@ class TelegramSenderService
 
     public function __construct(string $token)
     {
-        $config = ['timeout' => 30.0];
-
-        $proxy = env('TELEGRAM_PROXY') ?: getenv('https_proxy') ?: getenv('HTTPS_PROXY');
-        if ($proxy) {
-            $config['proxy'] = ['http' => $proxy, 'https' => $proxy];
-        }
-
-        $guzzle    = new GuzzleClient($config);
+        $guzzle    = new GuzzleClient(['timeout' => 30.0]);
         $this->api = new Api($token, false, new GuzzleHttpClient($guzzle));
     }
 
