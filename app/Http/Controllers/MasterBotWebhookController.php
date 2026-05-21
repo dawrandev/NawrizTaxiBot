@@ -25,33 +25,35 @@ class MasterBotWebhookController extends Controller
         $update  = $request->all();
         $adminId = (string) env('TELEGRAM_ADMIN_ID');
 
-        if (isset($update['callback_query'])) {
-            $this->handleCallbackQuery($update['callback_query'], $adminId);
-            return response('', 200);
-        }
+        defer(function () use ($update, $adminId) {
+            if (isset($update['callback_query'])) {
+                $this->handleCallbackQuery($update['callback_query'], $adminId);
+                return;
+            }
 
-        $message = $update['message'] ?? null;
-        if (!$message) return response('', 200);
+            $message = $update['message'] ?? null;
+            if (!$message) return;
 
-        $fromId = (string) ($message['from']['id'] ?? '');
-        $chatId = (string) ($message['chat']['id'] ?? '');
+            $fromId = (string) ($message['from']['id'] ?? '');
+            $chatId = (string) ($message['chat']['id'] ?? '');
 
-        if ($fromId !== $adminId) {
-            $this->sender->send($chatId, '⛔ Нет доступа');
-            return response('', 200);
-        }
+            if ($fromId !== $adminId) {
+                $this->sender->send($chatId, '⛔ Нет доступа');
+                return;
+            }
 
-        $text    = trim($message['text'] ?? '');
-        $pending = $this->masterService->getPending();
+            $text    = trim($message['text'] ?? '');
+            $pending = $this->masterService->getPending();
 
-        if ($pending && !str_starts_with($text, '/')) {
-            $this->handlePendingInput($chatId, $text, $pending);
-            return response('', 200);
-        }
+            if ($pending && !str_starts_with($text, '/')) {
+                $this->handlePendingInput($chatId, $text, $pending);
+                return;
+            }
 
-        if (str_starts_with($text, '/start')) {
-            $this->sendPanel($chatId);
-        }
+            if (str_starts_with($text, '/start')) {
+                $this->sendPanel($chatId);
+            }
+        });
 
         return response('', 200);
     }
