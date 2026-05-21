@@ -2,7 +2,9 @@
 
 namespace App\Services\Telegram;
 
+use GuzzleHttp\Client as GuzzleClient;
 use Telegram\Bot\Api;
+use Telegram\Bot\HttpClients\GuzzleHttpClient;
 
 class TelegramSenderService
 {
@@ -10,7 +12,19 @@ class TelegramSenderService
 
     public function __construct(string $token)
     {
-        $this->api = new Api($token);
+        $config = ['timeout' => 30.0];
+
+        $proxy = getenv('https_proxy') ?: getenv('HTTPS_PROXY');
+        if ($proxy) {
+            $parsed = parse_url($proxy);
+            $config['curl'] = [
+                CURLOPT_PROXY     => ($parsed['host'] ?? '127.0.0.1') . ':' . ($parsed['port'] ?? 1080),
+                CURLOPT_PROXYTYPE => CURLPROXY_SOCKS5,
+            ];
+        }
+
+        $guzzle    = new GuzzleClient($config);
+        $this->api = new Api($token, false, new GuzzleHttpClient($guzzle));
     }
 
     public function send(string $chatId, string $text, ?array $replyMarkup = null): void
