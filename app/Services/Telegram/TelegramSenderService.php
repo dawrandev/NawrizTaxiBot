@@ -2,9 +2,7 @@
 
 namespace App\Services\Telegram;
 
-use GuzzleHttp\Client as GuzzleClient;
 use Telegram\Bot\Api;
-use Telegram\Bot\HttpClients\GuzzleHttpClient;
 
 class TelegramSenderService
 {
@@ -12,8 +10,7 @@ class TelegramSenderService
 
     public function __construct(string $token)
     {
-        $guzzle    = new GuzzleClient(['timeout' => 30.0]);
-        $this->api = new Api($token, false, new GuzzleHttpClient($guzzle));
+        $this->api = new Api($token);
     }
 
     public function send(string $chatId, string $text, ?array $replyMarkup = null): void
