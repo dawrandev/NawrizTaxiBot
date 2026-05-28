@@ -185,8 +185,8 @@ class DriverBotWebhookController extends Controller
             "📝 Выбран: <i>{$preview}</i>",
         ]), [
             'inline_keyboard' => [
-                [$mk('5 сек', 5),  $mk('10 сек', 10), $mk('20 сек', 20)],
-                [$mk('30 сек', 30), $mk('1 мин', 60)],
+                [$mk('15 сек', 15), $mk('30 сек', 30), $mk('45 сек', 45)],
+                [$mk('1 мин', 60),  $mk('2 мин', 120)],
                 [['text' => '◀️ Назад', 'callback_data' => 'start']],
             ],
         ]);
@@ -541,7 +541,9 @@ class DriverBotWebhookController extends Controller
 
     private function formatInterval(int $seconds): string
     {
-        return $seconds < 60 ? "{$seconds} сек" : intdiv($seconds, 60) . ' мин';
+        if ($seconds < 60) return "{$seconds} сек";
+        $min = intdiv($seconds, 60);
+        return $min === 1 ? '1 мин' : "{$min} мин";
     }
 
     // ── Telegram membership events ────────────────────────────────────────────

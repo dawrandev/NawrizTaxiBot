@@ -29,7 +29,7 @@ class BotRunCommand extends Command
             $minSleep = 5;
 
             foreach ($bots as $bot) {
-                $interval = max(5, $bot->interval);
+                $interval = max(15, $bot->interval);
                 $lastSent = $bot->last_sent_at;
                 $elapsed  = $lastSent ? (int) $lastSent->diffInSeconds(now()) : $interval;
 
