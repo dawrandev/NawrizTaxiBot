@@ -185,7 +185,8 @@ class DriverBotWebhookController extends Controller
             "📝 Выбран: <i>{$preview}</i>",
         ]), [
             'inline_keyboard' => [
-                [$mk('15 сек', 15), $mk('30 сек', 30), $mk('45 сек', 45)],
+                [$mk('5 сек', 5),   $mk('10 сек', 10), $mk('15 сек', 15)],
+                [$mk('30 сек', 30), $mk('45 сек', 45)],
                 [$mk('1 мин', 60),  $mk('2 мин', 120)],
                 [['text' => '◀️ Назад', 'callback_data' => 'start']],
             ],
