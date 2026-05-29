@@ -74,7 +74,8 @@ class BotRunCommand extends Command
                             'error' => $msg,
                         ]);
                         try {
-                            $sender->send($bot->chat_id, "⚠️ Не удалось отправить в группу: <b>{$group->displayTitle()}</b>\n❌ {$msg}");
+                            $human = $this->humanizeError($msg);
+                            $sender->send($bot->chat_id, "⚠️ <b>Не удалось отправить в группу:</b>\n📍 <b>{$group->displayTitle()}</b>\n\n{$human}");
                         } catch (\Throwable) {}
                     }
                 }
@@ -87,5 +88,71 @@ class BotRunCommand extends Command
 
             sleep(max(1, $minSleep));
         }
+    }
+
+    private function humanizeError(string $msg): string
+    {
+        $lower = mb_strtolower($msg);
+
+        if (str_contains($lower, 'too many requests')) {
+            preg_match('/retry after (\d+)/i', $msg, $m);
+            $wait = isset($m[1]) ? " через {$m[1]} сек" : '';
+            return implode("\n", [
+                "🚦 <b>Слишком частая отправка</b>",
+                "Telegram временно ограничил бота из-за спама. Повтор{$wait}.",
+                '',
+                "✅ <b>Решение:</b> увеличьте интервал отправки (рекомендуется 60 секунд и больше).",
+            ]);
+        }
+
+        if (str_contains($lower, 'not enough rights')) {
+            return implode("\n", [
+                "🔒 <b>Нет прав на отправку</b>",
+                "Бот не может писать сообщения в этой группе.",
+                '',
+                "✅ <b>Решение:</b> сделайте бота администратором группы.",
+            ]);
+        }
+
+        if (str_contains($lower, 'kicked') || str_contains($lower, 'not a member')) {
+            return implode("\n", [
+                "🚪 <b>Бот удалён из группы</b>",
+                '',
+                "✅ <b>Решение:</b> добавьте бота обратно в группу.",
+            ]);
+        }
+
+        if (str_contains($lower, 'chat not found')) {
+            return implode("\n", [
+                "❓ <b>Группа не найдена</b>",
+                "Возможно, группа удалена или бот не состоит в ней.",
+                '',
+                "✅ <b>Решение:</b> проверьте группу и заново добавьте бота.",
+            ]);
+        }
+
+        if (str_contains($lower, 'blocked')) {
+            return implode("\n", [
+                "⛔ <b>Бот заблокирован</b>",
+                '',
+                "✅ <b>Решение:</b> разблокируйте бота.",
+            ]);
+        }
+
+        if (str_contains($lower, 'deactivated') || str_contains($lower, 'chat was upgraded')) {
+            return implode("\n", [
+                "♻️ <b>Группа изменилась</b>",
+                "Группа была преобразована в супергруппу, ID изменился.",
+                '',
+                "✅ <b>Решение:</b> заново добавьте бота в группу.",
+            ]);
+        }
+
+        return implode("\n", [
+            "❌ <b>Ошибка отправки</b>",
+            "<code>{$msg}</code>",
+            '',
+            "✅ <b>Решение:</b> проверьте права бота в группе или обратитесь к администратору.",
+        ]);
     }
 }
