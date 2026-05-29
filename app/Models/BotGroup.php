@@ -11,6 +11,7 @@ class BotGroup extends Model
         'driver_bot_id',
         'group_chat_id',
         'title',
+        'username',
         'run_selected',
         'wizard_selected',
     ];

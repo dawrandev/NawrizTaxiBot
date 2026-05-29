@@ -10,13 +10,20 @@ class DriverBotService
 {
     // ── Groups ────────────────────────────────────────────────────────────────
 
-    public function addGroup(DriverBot $bot, string $chatId, string $title): void
+    public function addGroup(DriverBot $bot, string $chatId, string $title, ?string $username = null): void
     {
         $group = $bot->groups()->where('group_chat_id', $chatId)->first();
 
         if ($group) {
+            $updates = [];
             if ($title && $group->title === '') {
-                $group->update(['title' => $title]);
+                $updates['title'] = $title;
+            }
+            if ($username && !$group->username) {
+                $updates['username'] = $username;
+            }
+            if ($updates) {
+                $group->update($updates);
             }
             return;
         }
@@ -24,6 +31,7 @@ class DriverBotService
         $bot->groups()->create([
             'group_chat_id'  => $chatId,
             'title'          => $title,
+            'username'       => $username,
             'run_selected'   => false,
             'wizard_selected' => false,
         ]);

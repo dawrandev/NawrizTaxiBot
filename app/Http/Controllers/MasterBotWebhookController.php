@@ -238,15 +238,19 @@ class MasterBotWebhookController extends Controller
             ? $bot->last_sent_at->setTimezone('Asia/Tashkent')->format('d.m.Y H:i:s')
             : 'Ещё не отправлял';
 
+        $groupsBlock = $this->buildGroupsBlock($bot);
+
         $this->sender->editMessage($chatId, $messageId, implode("\n", [
             "👤 <b>{$bot->name}</b>",
             '',
             "📊 Статус: {$status}",
             "🤖 Бот: {$username}",
             "🆔 Chat ID: <code>{$bot->chat_id}</code>",
-            "📋 Групп: {$bot->groups()->count()}",
             "📝 Шаблонов: {$bot->templates()->count()}",
             "🕐 Последняя отправка: {$lastSent}",
+            '',
+            "📋 <b>Группы ({$bot->groups()->count()}):</b>",
+            $groupsBlock,
         ]), [
             'inline_keyboard' => [
                 [
@@ -257,6 +261,41 @@ class MasterBotWebhookController extends Controller
                 [['text' => '◀️ Назад',               'callback_data' => 'back']],
             ],
         ]);
+    }
+
+    private function buildGroupsBlock(DriverBot $bot): string
+    {
+        $groups = $bot->groups()->orderByDesc('run_selected')->orderBy('title')->get();
+
+        if ($groups->isEmpty()) {
+            return '<i>Нет групп</i>';
+        }
+
+        // Resolve missing usernames once via driver bot (cached into DB)
+        $driverApi = null;
+        foreach ($groups as $group) {
+            if ($group->username !== null) continue;
+            try {
+                $driverApi ??= $this->factory->make($bot->bot_token)->getApi();
+                $info = $driverApi->getChat(['chat_id' => $group->group_chat_id])->toArray();
+                $group->update([
+                    'username' => $info['username'] ?? '',
+                    'title'    => $group->title ?: ($info['title'] ?? ''),
+                ]);
+            } catch (\Throwable) {
+                // leave as null, retry next time
+            }
+        }
+
+        $lines = [];
+        foreach ($groups as $group) {
+            $marker = $group->run_selected ? '🟢' : '⚪';
+            $title  = $group->title ?: $group->group_chat_id;
+            $uname  = $group->username ? " — @{$group->username}" : '';
+            $lines[] = "{$marker} {$title}{$uname}";
+        }
+
+        return implode("\n", $lines);
     }
 
     private function requestEditField(string $chatId, int $messageId, string $field, int $driverId): void

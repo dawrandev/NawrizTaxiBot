@@ -60,7 +60,7 @@ class DriverBotWebhookController extends Controller
                 $fc    = $message['forward_from_chat'];
                 $fcId  = (string) $fc['id'];
                 $isNew = !$this->botService->hasGroup($driverBot, $fcId);
-                $this->botService->addGroup($driverBot, $fcId, $fc['title'] ?? '');
+                $this->botService->addGroup($driverBot, $fcId, $fc['title'] ?? '', $fc['username'] ?? null);
                 $title = $fc['title'] ?? $fcId;
                 $this->sender->send($chatId, $isNew
                     ? "✅ Новая группа подключена: <b>{$title}</b>"
@@ -558,10 +558,11 @@ class DriverBotWebhookController extends Controller
             in_array($chatType, ['group', 'supergroup'], true) &&
             in_array($newStatus, ['member', 'administrator'], true)
         ) {
-            $id    = (string) $chat['id'];
-            $title = $chat['title'] ?? '';
-            $isNew = !$this->botService->hasGroup($bot, $id);
-            $this->botService->addGroup($bot, $id, $title);
+            $id       = (string) $chat['id'];
+            $title    = $chat['title'] ?? '';
+            $username = $chat['username'] ?? null;
+            $isNew    = !$this->botService->hasGroup($bot, $id);
+            $this->botService->addGroup($bot, $id, $title, $username);
 
             if ($isNew) {
                 $this->sender->send(
@@ -584,10 +585,11 @@ class DriverBotWebhookController extends Controller
 
         foreach ($newUsers as $user) {
             if ((int) $user['id'] === $botId) {
-                $id    = (string) $chat['id'];
-                $title = $chat['title'] ?? '';
-                $isNew = !$this->botService->hasGroup($bot, $id);
-                $this->botService->addGroup($bot, $id, $title);
+                $id       = (string) $chat['id'];
+                $title    = $chat['title'] ?? '';
+                $username = $chat['username'] ?? null;
+                $isNew    = !$this->botService->hasGroup($bot, $id);
+                $this->botService->addGroup($bot, $id, $title, $username);
 
                 if ($isNew) {
                     $this->sender->send(
