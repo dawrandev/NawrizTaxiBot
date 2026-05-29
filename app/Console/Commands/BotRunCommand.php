@@ -65,6 +65,8 @@ class BotRunCommand extends Command
                         $sender->send($group->group_chat_id, $template->body);
                         $sent++;
                         $this->line('[' . now()->format('H:i:s') . "] [{$bot->name}] ✅ → {$group->displayTitle()}");
+                        // Pacing: spread sends to stay under Telegram flood limits
+                        usleep(500_000);
                     } catch (\Throwable $e) {
                         $msg = $e->getMessage();
                         $this->error('[' . now()->format('H:i:s') . "] [{$bot->name}] ❌ {$group->displayTitle()}: {$msg}");
