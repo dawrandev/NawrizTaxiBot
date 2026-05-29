@@ -16,6 +16,10 @@ class BotRunCommand extends Command
     {
         $this->info('Бот запущен. Для остановки нажмите Ctrl+C.');
 
+        // In-memory state across cycles (bot:run is a persistent loop)
+        $floodUntil = []; // "{botId}:{chatId}" => unix ts to skip until (Telegram flood)
+        $notified   = []; // "{botId}:{chatId}" => true once driver was told about a failure
+
         while (true) {
             $bots = DriverBot::where('is_active', true)
                 ->with(['currentTemplate', 'activeGroups'])
@@ -61,12 +65,22 @@ class BotRunCommand extends Command
                 $sent   = 0;
 
                 foreach ($groups as $group) {
+                    $key = $bot->id . ':' . $group->group_chat_id;
+
+                    // Skip groups still inside a Telegram flood (retry after) window
+                    if (isset($floodUntil[$key]) && time() < $floodUntil[$key]) {
+                        $left = $floodUntil[$key] - time();
+                        $this->line('[' . now()->format('H:i:s') . "] [{$bot->name}] ⛔ {$group->displayTitle()} — flood, {$left}s qoldi");
+                        continue;
+                    }
+
                     try {
                         $sender->send($group->group_chat_id, $template->body);
                         $sent++;
+                        unset($notified[$key]); // recovered — allow future failures to notify again
                         $this->line('[' . now()->format('H:i:s') . "] [{$bot->name}] ✅ → {$group->displayTitle()}");
-                        // Pacing: spread sends to stay under Telegram flood limits
-                        usleep(500_000);
+                        // Pacing: 1 msg/sec to stay under Telegram flood limits
+                        usleep(1_000_000);
                     } catch (\Throwable $e) {
                         $msg = $e->getMessage();
                         $this->error('[' . now()->format('H:i:s') . "] [{$bot->name}] ❌ {$group->displayTitle()}: {$msg}");
@@ -75,10 +89,20 @@ class BotRunCommand extends Command
                             'group' => $group->group_chat_id,
                             'error' => $msg,
                         ]);
-                        try {
-                            $human = $this->humanizeError($msg);
-                            $sender->send($bot->chat_id, "⚠️ <b>Не удалось отправить в группу:</b>\n📍 <b>{$group->displayTitle()}</b>\n\n{$human}");
-                        } catch (\Throwable) {}
+
+                        // Honor "retry after N" — skip this group for N seconds
+                        if (preg_match('/retry after (\d+)/i', $msg, $m)) {
+                            $floodUntil[$key] = time() + (int) $m[1];
+                        }
+
+                        // Notify the driver only once per failure episode (not every cycle)
+                        if (!isset($notified[$key])) {
+                            $notified[$key] = true;
+                            try {
+                                $human = $this->humanizeError($msg);
+                                $sender->send($bot->chat_id, "⚠️ <b>Не удалось отправить в группу:</b>\n📍 <b>{$group->displayTitle()}</b>\n\n{$human}");
+                            } catch (\Throwable) {}
+                        }
                     }
                 }
 
