@@ -271,22 +271,6 @@ class MasterBotWebhookController extends Controller
             return '<i>Нет групп</i>';
         }
 
-        // Resolve missing usernames once via driver bot (cached into DB)
-        $driverApi = null;
-        foreach ($groups as $group) {
-            if ($group->username !== null) continue;
-            try {
-                $driverApi ??= $this->factory->make($bot->bot_token)->getApi();
-                $info = $driverApi->getChat(['chat_id' => $group->group_chat_id])->toArray();
-                $group->update([
-                    'username' => $info['username'] ?? '',
-                    'title'    => $group->title ?: ($info['title'] ?? ''),
-                ]);
-            } catch (\Throwable) {
-                // leave as null, retry next time
-            }
-        }
-
         $lines = [];
         foreach ($groups as $group) {
             $marker = $group->run_selected ? '🟢' : '⚪';
