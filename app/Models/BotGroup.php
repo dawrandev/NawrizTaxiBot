@@ -14,11 +14,13 @@ class BotGroup extends Model
         'username',
         'run_selected',
         'wizard_selected',
+        'leave_selected',
     ];
 
     protected $casts = [
         'run_selected'    => 'boolean',
         'wizard_selected' => 'boolean',
+        'leave_selected'  => 'boolean',
     ];
 
     public function driverBot(): BelongsTo

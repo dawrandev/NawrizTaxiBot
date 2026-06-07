@@ -67,6 +67,11 @@ class TelegramSenderService
         $this->api->answerCallbackQuery($params);
     }
 
+    public function leaveChat(string $chatId): void
+    {
+        $this->api->leaveChat(['chat_id' => $chatId]);
+    }
+
     public function getApi(): Api
     {
         return $this->api;

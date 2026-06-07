@@ -125,6 +125,15 @@ class DriverBotWebhookController extends Controller
             str_starts_with($data, 'tpl_edit:')   => $this->requestTemplateText($bot, $chatId, $messageId, $data),
             str_starts_with($data, 'tpl_del:')    => $this->deleteTemplate($bot, $chatId, $messageId, (int) substr($data, 8)),
 
+            $data === 'leave_menu'                  => $this->showLeaveMenu($bot, $chatId, $messageId),
+            $data === 'leave_select'                => $this->showLeaveSelect($bot, $chatId, $messageId),
+            str_starts_with($data, 'leave_toggle:') => $this->handleLeaveToggle($bot, $chatId, $messageId, (int) substr($data, 13)),
+            $data === 'leave_mark_all'              => $this->markAllLeave($bot, $chatId, $messageId, true),
+            $data === 'leave_unmark_all'            => $this->markAllLeave($bot, $chatId, $messageId, false),
+            $data === 'leave_do_selected'           => $this->executeLeaveSelected($bot, $chatId, $messageId),
+            $data === 'leave_all_confirm'           => $this->showLeaveAllConfirm($bot, $chatId, $messageId),
+            $data === 'leave_all_do'                => $this->executeLeaveAll($bot, $chatId, $messageId),
+
             default => null,
         };
     }
@@ -528,16 +537,21 @@ class DriverBotWebhookController extends Controller
             ? ['text' => '🛑 Остановить',  'callback_data' => 'stop']
             : ['text' => '▶️ Запустить',   'callback_data' => 'start'];
 
-        return [$text, [
-            'inline_keyboard' => [
-                [$actionBtn],
-                [
-                    ['text' => "📋 Группы ({$groupCount})",   'callback_data' => 'grp_list'],
-                    ['text' => "📋 Шаблоны ({$templateCount})", 'callback_data' => 'tpl_list'],
-                ],
-                [['text' => '🔄 Обновить', 'callback_data' => 'refresh']],
+        $buttons = [
+            [$actionBtn],
+            [
+                ['text' => "📋 Группы ({$groupCount})",   'callback_data' => 'grp_list'],
+                ['text' => "📋 Шаблоны ({$templateCount})", 'callback_data' => 'tpl_list'],
             ],
-        ]];
+        ];
+
+        if ($groupCount > 0) {
+            $buttons[] = [['text' => '🚪 Покинуть группы', 'callback_data' => 'leave_menu']];
+        }
+
+        $buttons[] = [['text' => '🔄 Обновить', 'callback_data' => 'refresh']];
+
+        return [$text, ['inline_keyboard' => $buttons]];
     }
 
     private function formatInterval(int $seconds): string
@@ -545,6 +559,171 @@ class DriverBotWebhookController extends Controller
         if ($seconds < 60) return "{$seconds} сек";
         $min = intdiv($seconds, 60);
         return $min === 1 ? '1 мин' : "{$min} мин";
+    }
+
+    // ── Leave groups ──────────────────────────────────────────────────────────
+
+    private function showLeaveMenu(DriverBot $bot, string $chatId, int $messageId): void
+    {
+        $count = $bot->groups()->count();
+
+        $this->sender->editMessage($chatId, $messageId, implode("\n", [
+            '🚪 <b>Выход из групп</b>',
+            '',
+            "📍 Всего подключённых групп: <b>{$count}</b>",
+            '',
+            'Выберите режим:',
+        ]), [
+            'inline_keyboard' => [
+                [['text' => '📋 Выбрать группы',     'callback_data' => 'leave_select']],
+                [['text' => '🗑 Покинуть ВСЕ группы', 'callback_data' => 'leave_all_confirm']],
+                [['text' => '◀️ Назад',                'callback_data' => 'back']],
+            ],
+        ]);
+    }
+
+    private function showLeaveSelect(DriverBot $bot, string $chatId, int $messageId): void
+    {
+        $this->botService->clearLeaveSelection($bot);
+        $bot->refresh();
+        $this->renderLeaveSelect($bot, $chatId, $messageId);
+    }
+
+    private function renderLeaveSelect(DriverBot $bot, string $chatId, int $messageId): void
+    {
+        $groups        = $bot->groups()->orderBy('title')->get();
+        $selectedCount = $groups->where('leave_selected', true)->count();
+
+        $buttons = [];
+        foreach ($groups as $group) {
+            $mark  = $group->leave_selected ? '☑' : '☐';
+            $title = mb_strimwidth($group->displayTitle(), 0, 40, '…');
+            $buttons[] = [['text' => "{$mark} {$title}", 'callback_data' => "leave_toggle:{$group->id}"]];
+        }
+
+        $buttons[] = [
+            ['text' => '✅ Отметить все', 'callback_data' => 'leave_mark_all'],
+            ['text' => '⬜ Снять все',     'callback_data' => 'leave_unmark_all'],
+        ];
+        if ($selectedCount > 0) {
+            $buttons[] = [['text' => "🚪 Покинуть отмеченные ({$selectedCount})", 'callback_data' => 'leave_do_selected']];
+        }
+        $buttons[] = [['text' => '◀️ Назад', 'callback_data' => 'back']];
+
+        $this->sender->editMessage($chatId, $messageId, implode("\n", [
+            '📋 <b>Выберите группы для выхода</b>',
+            '',
+            "Отмечено: <b>{$selectedCount}</b>",
+        ]), [
+            'inline_keyboard' => $buttons,
+        ]);
+    }
+
+    private function handleLeaveToggle(DriverBot $bot, string $chatId, int $messageId, int $groupId): void
+    {
+        $this->botService->toggleLeaveGroup($bot, $groupId);
+        $bot->refresh();
+        $this->renderLeaveSelect($bot, $chatId, $messageId);
+    }
+
+    private function markAllLeave(DriverBot $bot, string $chatId, int $messageId, bool $value): void
+    {
+        $this->botService->setLeaveAllGroups($bot, $value);
+        $bot->refresh();
+        $this->renderLeaveSelect($bot, $chatId, $messageId);
+    }
+
+    private function showLeaveAllConfirm(DriverBot $bot, string $chatId, int $messageId): void
+    {
+        $count = $bot->groups()->count();
+
+        if ($count === 0) {
+            $this->updatePanel($bot, $chatId, $messageId);
+            return;
+        }
+
+        $this->sender->editMessage($chatId, $messageId, implode("\n", [
+            '⚠️ <b>Подтверждение</b>',
+            '',
+            "Бот покинет <b>ВСЕ {$count} групп</b> и они будут удалены из списка.",
+            '',
+            'Это действие необратимо.',
+        ]), [
+            'inline_keyboard' => [
+                [['text' => '✅ Да, покинуть все', 'callback_data' => 'leave_all_do']],
+                [['text' => '❌ Отмена',           'callback_data' => 'leave_menu']],
+            ],
+        ]);
+    }
+
+    private function executeLeaveSelected(DriverBot $bot, string $chatId, int $messageId): void
+    {
+        $groups = $bot->groups()->where('leave_selected', true)->get();
+
+        if ($groups->isEmpty()) {
+            $this->sender->editMessage($chatId, $messageId, '⚠️ Не выбрано ни одной группы.', [
+                'inline_keyboard' => [[['text' => '◀️ Назад', 'callback_data' => 'leave_select']]],
+            ]);
+            return;
+        }
+
+        $this->doLeave($bot, $groups, $chatId, $messageId);
+    }
+
+    private function executeLeaveAll(DriverBot $bot, string $chatId, int $messageId): void
+    {
+        $groups = $bot->groups()->get();
+
+        if ($groups->isEmpty()) {
+            $this->updatePanel($bot, $chatId, $messageId);
+            return;
+        }
+
+        $this->doLeave($bot, $groups, $chatId, $messageId);
+    }
+
+    private function doLeave(DriverBot $bot, $groups, string $chatId, int $messageId): void
+    {
+        $total = $groups->count();
+
+        try {
+            $this->sender->editMessage(
+                $chatId,
+                $messageId,
+                "🚪 Выход из <b>{$total}</b> групп...\n\nПожалуйста, подождите ~{$total} сек."
+            );
+        } catch (\Throwable) {}
+
+        $left = 0; $failed = 0;
+        foreach ($groups as $group) {
+            try {
+                $this->sender->leaveChat($group->group_chat_id);
+                $group->delete();
+                $left++;
+            } catch (\Throwable) {
+                $failed++;
+            }
+            usleep(500_000); // 0.5s pacing to stay under Telegram rate limits
+        }
+
+        // Stop the bot if no groups remain
+        if ($bot->groups()->count() === 0 && $bot->is_active) {
+            $this->botService->stopBot($bot);
+        }
+        $bot->refresh();
+
+        $lines = [
+            '✅ <b>Готово</b>',
+            '',
+            "🚪 Покинуто: <b>{$left}</b> из {$total}",
+        ];
+        if ($failed > 0) {
+            $lines[] = "❌ Не удалось покинуть: <b>{$failed}</b>";
+        }
+
+        $this->sender->editMessage($chatId, $messageId, implode("\n", $lines), [
+            'inline_keyboard' => [[['text' => '◀️ В панель', 'callback_data' => 'back']]],
+        ]);
     }
 
     // ── Telegram membership events ────────────────────────────────────────────

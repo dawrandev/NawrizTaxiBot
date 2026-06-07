@@ -65,6 +65,26 @@ class DriverBotService
         $bot->groups()->update(['wizard_selected' => $selected]);
     }
 
+    // ── Leave selection ──────────────────────────────────────────────────────
+
+    public function toggleLeaveGroup(DriverBot $bot, int $groupId): void
+    {
+        $group = $bot->groups()->find($groupId);
+        if ($group) {
+            $group->update(['leave_selected' => !$group->leave_selected]);
+        }
+    }
+
+    public function setLeaveAllGroups(DriverBot $bot, bool $selected): void
+    {
+        $bot->groups()->update(['leave_selected' => $selected]);
+    }
+
+    public function clearLeaveSelection(DriverBot $bot): void
+    {
+        $bot->groups()->update(['leave_selected' => false]);
+    }
+
     // ── Templates ─────────────────────────────────────────────────────────────
 
     public function addTemplate(DriverBot $bot, string $text): Template
