@@ -12,7 +12,7 @@ class TelegramSenderService
 
     public function __construct(string $token)
     {
-        $config = ['timeout' => 15.0];
+        $config = ['timeout' => 30.0];
 
         $proxy = getenv('https_proxy') ?: getenv('HTTPS_PROXY');
         if ($proxy) {
