@@ -64,11 +64,13 @@ class BotRunCommand extends Command
                 $sender = $factory->make($bot->bot_token);
                 $sent   = 0;
 
-                foreach ($groups as $i => $group) {
-                    // Every 5 groups, yield the proxy for 3s so master/driver webhook
-                    // calls (Stop, panel refresh, etc.) get a clear window to respond.
-                    if ($i > 0 && $i % 5 === 0) {
-                        sleep(3);
+                foreach ($groups as $group) {
+                    // Adaptive yield: pause only while a webhook is actively using
+                    // the proxy (Stop / refresh / panel clicks). Zero overhead when idle.
+                    $waited = 0;
+                    while ($this->isWebhookBusy() && $waited < 10) {
+                        sleep(1);
+                        $waited++;
                     }
 
                     // Mid-cycle stop check: if driver pressed Stop, abandon this cycle immediately
@@ -126,6 +128,19 @@ class BotRunCommand extends Command
 
             sleep(max(1, $minSleep));
         }
+    }
+
+    private function isWebhookBusy(): bool
+    {
+        $files = glob(storage_path('app/webhook-*.flag')) ?: [];
+        foreach ($files as $f) {
+            $ts = (int) @file_get_contents($f);
+            if (time() - $ts < 15) {
+                return true;
+            }
+            @unlink($f); // stale flag — webhook crashed without cleanup
+        }
+        return false;
     }
 
     private function humanizeError(string $msg): string

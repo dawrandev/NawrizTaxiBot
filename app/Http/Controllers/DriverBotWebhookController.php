@@ -26,57 +26,64 @@ class DriverBotWebhookController extends Controller
         $update       = $request->all();
 
         defer(function () use ($update, $driverBot) {
-            if (isset($update['my_chat_member'])) {
-                $this->handleMyChatMember($driverBot, $update['my_chat_member']);
-                return;
-            }
+            $flag = storage_path('app/webhook-' . uniqid('d', true) . '.flag');
+            @file_put_contents($flag, (string) time());
 
-            if (isset($update['callback_query'])) {
-                $this->handleCallbackQuery($driverBot, $update['callback_query']);
-                return;
-            }
+            try {
+                if (isset($update['my_chat_member'])) {
+                    $this->handleMyChatMember($driverBot, $update['my_chat_member']);
+                    return;
+                }
 
-            $message = $update['message'] ?? null;
-            if (!$message) return;
+                if (isset($update['callback_query'])) {
+                    $this->handleCallbackQuery($driverBot, $update['callback_query']);
+                    return;
+                }
 
-            if (isset($message['new_chat_members'])) {
-                $this->handleNewChatMembers($driverBot, $message);
-                return;
-            }
+                $message = $update['message'] ?? null;
+                if (!$message) return;
 
-            $text     = trim($message['text'] ?? '');
-            $fromId   = (string) ($message['from']['id'] ?? '');
-            $chatId   = (string) ($message['chat']['id'] ?? '');
-            $chatType = $message['chat']['type'] ?? 'private';
+                if (isset($message['new_chat_members'])) {
+                    $this->handleNewChatMembers($driverBot, $message);
+                    return;
+                }
 
-            if ($chatType !== 'private' || $fromId !== $driverBot->chat_id) {
-                return;
-            }
+                $text     = trim($message['text'] ?? '');
+                $fromId   = (string) ($message['from']['id'] ?? '');
+                $chatId   = (string) ($message['chat']['id'] ?? '');
+                $chatType = $message['chat']['type'] ?? 'private';
 
-            if (
-                isset($message['forward_from_chat']) &&
-                in_array($message['forward_from_chat']['type'] ?? '', ['group', 'supergroup'], true)
-            ) {
-                $fc    = $message['forward_from_chat'];
-                $fcId  = (string) $fc['id'];
-                $isNew = !$this->botService->hasGroup($driverBot, $fcId);
-                $this->botService->addGroup($driverBot, $fcId, $fc['title'] ?? '', $fc['username'] ?? null);
-                $title = $fc['title'] ?? $fcId;
-                $this->sender->send($chatId, $isNew
-                    ? "✅ Новая группа подключена: <b>{$title}</b>"
-                    : "ℹ️ Группа уже подключена: <b>{$title}</b>"
-                );
-                return;
-            }
+                if ($chatType !== 'private' || $fromId !== $driverBot->chat_id) {
+                    return;
+                }
 
-            $pending = $driverBot->pending;
-            if ($pending && !str_starts_with($text, '/')) {
-                $this->handlePendingInput($driverBot, $chatId, $text, $pending);
-                return;
-            }
+                if (
+                    isset($message['forward_from_chat']) &&
+                    in_array($message['forward_from_chat']['type'] ?? '', ['group', 'supergroup'], true)
+                ) {
+                    $fc    = $message['forward_from_chat'];
+                    $fcId  = (string) $fc['id'];
+                    $isNew = !$this->botService->hasGroup($driverBot, $fcId);
+                    $this->botService->addGroup($driverBot, $fcId, $fc['title'] ?? '', $fc['username'] ?? null);
+                    $title = $fc['title'] ?? $fcId;
+                    $this->sender->send($chatId, $isNew
+                        ? "✅ Новая группа подключена: <b>{$title}</b>"
+                        : "ℹ️ Группа уже подключена: <b>{$title}</b>"
+                    );
+                    return;
+                }
 
-            if (str_starts_with($text, '/start')) {
-                $this->sendPanel($driverBot, $chatId);
+                $pending = $driverBot->pending;
+                if ($pending && !str_starts_with($text, '/')) {
+                    $this->handlePendingInput($driverBot, $chatId, $text, $pending);
+                    return;
+                }
+
+                if (str_starts_with($text, '/start')) {
+                    $this->sendPanel($driverBot, $chatId);
+                }
+            } finally {
+                @unlink($flag);
             }
         });
 

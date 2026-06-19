@@ -26,32 +26,39 @@ class MasterBotWebhookController extends Controller
         $adminId = (string) env('TELEGRAM_ADMIN_ID');
 
         defer(function () use ($update, $adminId) {
-            if (isset($update['callback_query'])) {
-                $this->handleCallbackQuery($update['callback_query'], $adminId);
-                return;
-            }
+            $flag = storage_path('app/webhook-' . uniqid('m', true) . '.flag');
+            @file_put_contents($flag, (string) time());
 
-            $message = $update['message'] ?? null;
-            if (!$message) return;
+            try {
+                if (isset($update['callback_query'])) {
+                    $this->handleCallbackQuery($update['callback_query'], $adminId);
+                    return;
+                }
 
-            $fromId = (string) ($message['from']['id'] ?? '');
-            $chatId = (string) ($message['chat']['id'] ?? '');
+                $message = $update['message'] ?? null;
+                if (!$message) return;
 
-            if ($fromId !== $adminId) {
-                $this->sender->send($chatId, '⛔ Нет доступа');
-                return;
-            }
+                $fromId = (string) ($message['from']['id'] ?? '');
+                $chatId = (string) ($message['chat']['id'] ?? '');
 
-            $text    = trim($message['text'] ?? '');
-            $pending = $this->masterService->getPending();
+                if ($fromId !== $adminId) {
+                    $this->sender->send($chatId, '⛔ Нет доступа');
+                    return;
+                }
 
-            if ($pending && !str_starts_with($text, '/')) {
-                $this->handlePendingInput($chatId, $text, $pending);
-                return;
-            }
+                $text    = trim($message['text'] ?? '');
+                $pending = $this->masterService->getPending();
 
-            if (str_starts_with($text, '/start')) {
-                $this->sendPanel($chatId);
+                if ($pending && !str_starts_with($text, '/')) {
+                    $this->handlePendingInput($chatId, $text, $pending);
+                    return;
+                }
+
+                if (str_starts_with($text, '/start')) {
+                    $this->sendPanel($chatId);
+                }
+            } finally {
+                @unlink($flag);
             }
         });
 
