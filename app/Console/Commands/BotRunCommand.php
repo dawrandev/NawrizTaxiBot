@@ -65,6 +65,12 @@ class BotRunCommand extends Command
                 $sent   = 0;
 
                 foreach ($groups as $group) {
+                    // Mid-cycle stop check: if driver pressed Stop, abandon this cycle immediately
+                    if (!(bool) DriverBot::where('id', $bot->id)->value('is_active')) {
+                        $this->line('[' . now()->format('H:i:s') . "] [{$bot->name}] 🛑 Остановлено водителем — прерываем цикл");
+                        break;
+                    }
+
                     $key = $bot->id . ':' . $group->group_chat_id;
 
                     // Skip groups still inside a Telegram flood (retry after) window
