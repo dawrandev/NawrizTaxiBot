@@ -64,7 +64,13 @@ class BotRunCommand extends Command
                 $sender = $factory->make($bot->bot_token);
                 $sent   = 0;
 
-                foreach ($groups as $group) {
+                foreach ($groups as $i => $group) {
+                    // Every 5 groups, yield the proxy for 3s so master/driver webhook
+                    // calls (Stop, panel refresh, etc.) get a clear window to respond.
+                    if ($i > 0 && $i % 5 === 0) {
+                        sleep(3);
+                    }
+
                     // Mid-cycle stop check: if driver pressed Stop, abandon this cycle immediately
                     if (!(bool) DriverBot::where('id', $bot->id)->value('is_active')) {
                         $this->line('[' . now()->format('H:i:s') . "] [{$bot->name}] 🛑 Остановлено водителем — прерываем цикл");
