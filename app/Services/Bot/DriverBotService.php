@@ -164,12 +164,25 @@ class DriverBotService
             'wizard_interval'    => null,
         ]);
 
+        // Close any stray open session, then open a new one
+        $bot->sessions()->whereNull('stopped_at')->update(['stopped_at' => now()]);
+        $bot->sessions()->create(['started_at' => now()]);
+        $this->pruneSessions($bot);
+
         return true;
     }
 
     public function stopBot(DriverBot $bot): void
     {
         $bot->update(['is_active' => false]);
+        $bot->sessions()->whereNull('stopped_at')->update(['stopped_at' => now()]);
+    }
+
+    private function pruneSessions(DriverBot $bot): void
+    {
+        // Keep only the latest 5 sessions per bot
+        $keepIds = $bot->sessions()->orderByDesc('started_at')->limit(5)->pluck('id');
+        $bot->sessions()->whereNotIn('id', $keepIds)->delete();
     }
 
     // ── Pending ───────────────────────────────────────────────────────────────

@@ -56,4 +56,9 @@ class DriverBot extends Model
     {
         return $this->belongsTo(Template::class, 'wizard_template_id');
     }
+
+    public function sessions(): HasMany
+    {
+        return $this->hasMany(BotSession::class);
+    }
 }

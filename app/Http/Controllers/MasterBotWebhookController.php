@@ -89,6 +89,7 @@ class MasterBotWebhookController extends Controller
             str_starts_with($data, 'driver_del:')       => $this->deleteDriver($chatId, $messageId, (int) substr($data, 11)),
             str_starts_with($data, 'driver_edit_name:') => $this->requestEditField($chatId, $messageId, 'name', (int) substr($data, 17)),
             str_starts_with($data, 'driver_edit_chat:') => $this->requestEditField($chatId, $messageId, 'chat_id', (int) substr($data, 17)),
+            str_starts_with($data, 'driver_sessions:')  => $this->showDriverSessions($chatId, $messageId, (int) substr($data, 16)),
             default                                     => null,
         };
     }
@@ -260,6 +261,7 @@ class MasterBotWebhookController extends Controller
             $groupsBlock,
         ]), [
             'inline_keyboard' => [
+                [['text' => '🕐 История использования', 'callback_data' => "driver_sessions:{$bot->id}"]],
                 [
                     ['text' => '✏️ Изменить имя',    'callback_data' => "driver_edit_name:{$bot->id}"],
                     ['text' => '✏️ Изменить chat_id', 'callback_data' => "driver_edit_chat:{$bot->id}"],
@@ -268,6 +270,59 @@ class MasterBotWebhookController extends Controller
                 [['text' => '◀️ Назад',               'callback_data' => 'back']],
             ],
         ]);
+    }
+
+    private function showDriverSessions(string $chatId, int $messageId, int $driverId): void
+    {
+        $bot = DriverBot::find($driverId);
+        if (!$bot) {
+            $this->updatePanel($chatId, $messageId);
+            return;
+        }
+
+        $sessions = $bot->sessions()->orderByDesc('started_at')->limit(5)->get();
+
+        $lines = [
+            '🕐 <b>История использования</b>',
+            "👤 <b>{$bot->name}</b>",
+            '',
+        ];
+
+        if ($sessions->isEmpty()) {
+            $lines[] = '<i>Сессий пока нет. Они появятся, когда водитель запустит бота.</i>';
+        } else {
+            $lines[] = "Последние {$sessions->count()} сессий (время Asia/Tashkent):";
+            $lines[] = '';
+
+            foreach ($sessions as $i => $s) {
+                $num   = $i + 1;
+                $start = $s->started_at->setTimezone('Asia/Tashkent');
+
+                if ($s->stopped_at) {
+                    $stop      = $s->stopped_at->setTimezone('Asia/Tashkent');
+                    $minutes   = (int) round(($stop->getTimestamp() - $start->getTimestamp()) / 60);
+                    $duration  = $this->formatDuration($minutes);
+                    $lines[]   = "{$num}. <b>{$start->format('d.m')}</b>  {$start->format('H:i')} → {$stop->format('H:i')}  <i>({$duration})</i>";
+                } else {
+                    $minutes  = (int) round((now()->getTimestamp() - $start->getTimestamp()) / 60);
+                    $duration = $this->formatDuration($minutes);
+                    $lines[]  = "{$num}. <b>{$start->format('d.m')}</b>  {$start->format('H:i')} → 🟢 в работе  <i>({$duration})</i>";
+                }
+            }
+        }
+
+        $this->sender->editMessage($chatId, $messageId, implode("\n", $lines), [
+            'inline_keyboard' => [[['text' => '◀️ Назад', 'callback_data' => "driver_view:{$bot->id}"]]],
+        ]);
+    }
+
+    private function formatDuration(int $minutes): string
+    {
+        if ($minutes < 1)  return 'меньше минуты';
+        if ($minutes < 60) return "{$minutes} мин";
+        $h = intdiv($minutes, 60);
+        $m = $minutes % 60;
+        return $m ? "{$h}ч {$m}м" : "{$h}ч";
     }
 
     private function buildGroupsBlock(DriverBot $bot): string
