@@ -32,6 +32,13 @@ return [
     */
     'master_token' => env('MASTER_BOT_TOKEN'),
 
+    /*
+    | SOCKS5 proxy for all Telegram API calls. Required where api.telegram.org
+    | is throttled/blocked (direct connection ~20s). Example:
+    |   TELEGRAM_PROXY=socks5://127.0.0.1:1080
+    */
+    'proxy' => env('TELEGRAM_PROXY'),
+
     'bots' => [
         'mybot' => [
             'token' => env('TELEGRAM_BOT_TOKEN', 'YOUR-BOT-TOKEN'),

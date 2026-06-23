@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers;
 
+use App\Jobs\ProcessMasterUpdate;
 use App\Models\DriverBot;
 use App\Services\Bot\MasterBotService;
 use App\Services\Telegram\TelegramClientFactory;
@@ -20,49 +21,54 @@ class MasterBotWebhookController extends Controller
         $this->sender = $factory->master();
     }
 
+    /**
+     * Telegram webhook entry point. Returns 200 instantly and hands the slow
+     * Telegram API work to the dedicated "master" queue worker, so the web
+     * worker is never blocked and the admin panel stays responsive even while
+     * bot:run is broadcasting.
+     */
     public function handle(Request $request): Response
     {
-        $update  = $request->all();
-        $adminId = (string) env('TELEGRAM_ADMIN_ID');
-
-        defer(function () use ($update, $adminId) {
-            $flag = storage_path('app/webhook-' . uniqid('m', true) . '.flag');
-            @file_put_contents($flag, (string) time());
-
-            try {
-                if (isset($update['callback_query'])) {
-                    $this->handleCallbackQuery($update['callback_query'], $adminId);
-                    return;
-                }
-
-                $message = $update['message'] ?? null;
-                if (!$message) return;
-
-                $fromId = (string) ($message['from']['id'] ?? '');
-                $chatId = (string) ($message['chat']['id'] ?? '');
-
-                if ($fromId !== $adminId) {
-                    $this->sender->send($chatId, '⛔ Нет доступа');
-                    return;
-                }
-
-                $text    = trim($message['text'] ?? '');
-                $pending = $this->masterService->getPending();
-
-                if ($pending && !str_starts_with($text, '/')) {
-                    $this->handlePendingInput($chatId, $text, $pending);
-                    return;
-                }
-
-                if (str_starts_with($text, '/start')) {
-                    $this->sendPanel($chatId);
-                }
-            } finally {
-                @unlink($flag);
-            }
-        });
+        ProcessMasterUpdate::dispatch($request->all())->onQueue('master');
 
         return response('', 200);
+    }
+
+    /**
+     * Runs inside the queue worker (see ProcessMasterUpdate). Contains the
+     * actual update handling that used to live in the defer() block.
+     */
+    public function process(array $update): void
+    {
+        $adminId = (string) env('TELEGRAM_ADMIN_ID');
+
+        if (isset($update['callback_query'])) {
+            $this->handleCallbackQuery($update['callback_query'], $adminId);
+            return;
+        }
+
+        $message = $update['message'] ?? null;
+        if (!$message) return;
+
+        $fromId = (string) ($message['from']['id'] ?? '');
+        $chatId = (string) ($message['chat']['id'] ?? '');
+
+        if ($fromId !== $adminId) {
+            $this->sender->send($chatId, '⛔ Нет доступа');
+            return;
+        }
+
+        $text    = trim($message['text'] ?? '');
+        $pending = $this->masterService->getPending();
+
+        if ($pending && !str_starts_with($text, '/')) {
+            $this->handlePendingInput($chatId, $text, $pending);
+            return;
+        }
+
+        if (str_starts_with($text, '/start')) {
+            $this->sendPanel($chatId);
+        }
     }
 
     // ── Callback dispatcher ───────────────────────────────────────────────────

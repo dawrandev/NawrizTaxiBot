@@ -14,12 +14,17 @@ class TelegramSenderService
     {
         $config = ['timeout' => 30.0];
 
-        $proxy = getenv('https_proxy') ?: getenv('HTTPS_PROXY');
+        // Proxy: prefer shell env (https_proxy), fall back to .env TELEGRAM_PROXY.
+        // The server is in a region where api.telegram.org is heavily throttled
+        // (~20s direct), so the local SOCKS5 tunnel (127.0.0.1:1080) is required.
+        $proxy = getenv('https_proxy') ?: getenv('HTTPS_PROXY') ?: config('telegram.proxy');
         if ($proxy) {
             $parsed = parse_url($proxy);
             $config['curl'] = [
                 CURLOPT_PROXY     => ($parsed['host'] ?? '127.0.0.1') . ':' . ($parsed['port'] ?? 1080),
-                CURLOPT_PROXYTYPE => CURLPROXY_SOCKS5,
+                // SOCKS5_HOSTNAME = resolve DNS through the proxy. Plain SOCKS5
+                // resolves locally, which fails where DNS itself is blocked.
+                CURLOPT_PROXYTYPE => CURLPROXY_SOCKS5_HOSTNAME,
             ];
         }
 
