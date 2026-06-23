@@ -12,6 +12,16 @@ class BotRunCommand extends Command
     protected $signature   = 'bot:run';
     protected $description = 'Run the multi-bot message sender (runs continuously)';
 
+    /**
+     * Pause between sends to DIFFERENT groups within one cycle (microseconds).
+     *
+     * Each group is a distinct chat, so Telegram's per-chat limit (~1 msg/s)
+     * doesn't apply here — only the global ~30 msg/s ceiling does. 250ms (4/s)
+     * stays well under that while broadcasting ~4x faster than the old 1s.
+     * If a group ever floods, the "retry after" handler below backs it off.
+     */
+    private const SEND_PACING_US = 250_000;
+
     public function handle(TelegramClientFactory $factory): int
     {
         $this->info('Бот запущен. Для остановки нажмите Ctrl+C.');
@@ -85,8 +95,8 @@ class BotRunCommand extends Command
                         $sent++;
                         unset($notified[$key]); // recovered — allow future failures to notify again
                         $this->line('[' . now()->format('H:i:s') . "] [{$bot->name}] ✅ → {$group->displayTitle()}");
-                        // Pacing: 1 msg/sec to stay under Telegram flood limits
-                        usleep(1_000_000);
+                        // Pacing between different groups (see SEND_PACING_US).
+                        usleep(self::SEND_PACING_US);
                     } catch (\Throwable $e) {
                         $msg = $e->getMessage();
                         $this->error('[' . now()->format('H:i:s') . "] [{$bot->name}] ❌ {$group->displayTitle()}: {$msg}");
