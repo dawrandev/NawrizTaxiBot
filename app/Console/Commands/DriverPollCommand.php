@@ -73,11 +73,14 @@ class DriverPollCommand extends Command
                     continue;
                 }
 
+                $batch = count($updates);
+
                 foreach ($updates as $update) {
                     $arr               = $update->toArray();
                     $updateId          = (int) ($arr['update_id'] ?? 0);
                     $offsets[$bot->id] = $updateId + 1; // ack
 
+                    $t0 = microtime(true);
                     try {
                         $controller->process($arr, $bot);
                     } catch (\Throwable $e) {
@@ -87,6 +90,12 @@ class DriverPollCommand extends Command
                             'error'     => $e->getMessage(),
                         ]);
                     }
+                    $ms = (int) round((microtime(true) - $t0) * 1000);
+                    @file_put_contents(
+                        storage_path('logs/poll.log'),
+                        sprintf("%s [driver:%s] update %d: %dms (batch %d)\n", date('H:i:s'), $bot->name, $updateId, $ms, $batch),
+                        FILE_APPEND
+                    );
                 }
             }
         }
