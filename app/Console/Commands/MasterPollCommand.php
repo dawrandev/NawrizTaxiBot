@@ -54,14 +54,11 @@ class MasterPollCommand extends Command
                 continue;
             }
 
-            $batch = count($updates);
-
             foreach ($updates as $update) {
                 $arr      = $update->toArray();
                 $updateId = (int) ($arr['update_id'] ?? 0);
                 $offset   = $updateId + 1; // ack: never receive this update again
 
-                $t0 = microtime(true);
                 try {
                     $controller->process($arr);
                 } catch (\Throwable $e) {
@@ -70,23 +67,7 @@ class MasterPollCommand extends Command
                         'error'     => $e->getMessage(),
                     ]);
                 }
-                $this->timing('master', $updateId, $t0, $batch);
             }
         }
-    }
-
-    /**
-     * Append one timing line to storage/logs/poll.log so we can see, per tap,
-     * how long process() took and how many updates were waiting in the batch
-     * (a growing batch = rapid taps piling up behind serial processing).
-     */
-    private function timing(string $tag, int $updateId, float $t0, int $batch): void
-    {
-        $ms = (int) round((microtime(true) - $t0) * 1000);
-        @file_put_contents(
-            storage_path('logs/poll.log'),
-            sprintf("%s [%s] update %d: %dms (batch %d)\n", date('H:i:s'), $tag, $updateId, $ms, $batch),
-            FILE_APPEND
-        );
     }
 }
