@@ -1,5 +1,15 @@
 # Master bot sekinligi — sabab va yechim (joylashtirish qo'llanmasi)
 
+> **YANGILANISH (polling'ga o'tildi).** Webhook (Telegram→server) bu UZ serverga
+> ishonchsiz edi — Telegram endpoint'ga yetolmay "Connection timed out" berardi va
+> har amal 15s+ kechikardi. Yechim: ikkala bot ham proxy orqali update'larni **o'zi
+> tortib oladi** (`master:poll`, `driver:poll` — getUpdates long-poll). Webhook yo'q →
+> kiruvchi timeout yo'q. Queue worker'lar (`queue:work master/driver`) endi **kerak emas**,
+> ularni to'xtating. `bot:set-webhooks` ni **ishlatmang** (poll'ni buzadi).
+> Joylashtirish: `git pull` → `pkill -f "queue:work.*queue=master"` va
+> `pkill -f "queue:work.*queue=driver"` → `bash deploy/start-workers.sh`.
+> (Poll loop'lar ishga tushganda webhook'ni avtomatik o'chiradi.)
+
 ## Asl sabab (serverda tasdiqlangan)
 
 Server O'zbekistonda (`dbc-server.uz`) va **api.telegram.org ga to'g'ridan-to'g'ri

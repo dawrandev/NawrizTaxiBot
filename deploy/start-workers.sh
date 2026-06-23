@@ -38,13 +38,14 @@ start_if_down () {
     fi
 }
 
-# MASTER bot — alohida worker (admin paneli doim tez javob beradi)
-start_if_down "queue:work.*queue=master" \
-    $PHP artisan queue:work database --queue=master --sleep=1 --tries=1 --timeout=60
+# MASTER bot — proxy orqali long-poll (webhooksiz; Telegram'ning serverga
+# yetishiga bog'liq emas → kiruvchi timeout yo'q, panel doim tez)
+start_if_down "artisan master:poll" \
+    $PHP artisan master:poll
 
-# DRIVER botlar — alohida worker
-start_if_down "queue:work.*queue=driver" \
-    $PHP artisan queue:work database --queue=driver,default --sleep=1 --tries=1 --timeout=60
+# DRIVER bot(lar) — proxy orqali long-poll (webhooksiz)
+start_if_down "artisan driver:poll" \
+    $PHP artisan driver:poll
 
 # Guruhlarga broadcast (avvalgidek)
 start_if_down "artisan bot:run" \

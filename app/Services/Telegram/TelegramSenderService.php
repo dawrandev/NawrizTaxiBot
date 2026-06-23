@@ -72,7 +72,16 @@ class TelegramSenderService
             $params['reply_markup'] = json_encode($replyMarkup);
         }
 
-        $this->api->editMessageText($params);
+        try {
+            $this->api->editMessageText($params);
+        } catch (\Throwable $e) {
+            // Tapping a button that re-renders the same panel (refresh/back)
+            // yields "message is not modified" — a no-op, not a real error.
+            // Anything else propagates.
+            if (!str_contains($e->getMessage(), 'message is not modified')) {
+                throw $e;
+            }
+        }
     }
 
     public function answerCallback(string $callbackQueryId, string $text = ''): void
