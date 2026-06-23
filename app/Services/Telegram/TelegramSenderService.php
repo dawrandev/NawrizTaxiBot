@@ -12,7 +12,15 @@ class TelegramSenderService
 
     public function __construct(string $token)
     {
-        $config = ['timeout' => 30.0];
+        // Keep the underlying TCP/TLS connection alive between requests. This
+        // sender is reused across jobs (singleton factory), so cURL keeps the
+        // warm SOCKS5+TLS tunnel in its pool and skips the ~0.6s handshake on
+        // every call but the first.
+        $curl = [
+            CURLOPT_TCP_KEEPALIVE => 1,
+            CURLOPT_TCP_KEEPIDLE  => 30,
+            CURLOPT_TCP_KEEPINTVL => 15,
+        ];
 
         // Proxy: prefer shell env (https_proxy), fall back to .env TELEGRAM_PROXY.
         // The server is in a region where api.telegram.org is heavily throttled
@@ -20,15 +28,19 @@ class TelegramSenderService
         $proxy = getenv('https_proxy') ?: getenv('HTTPS_PROXY') ?: config('telegram.proxy');
         if ($proxy) {
             $parsed = parse_url($proxy);
-            $config['curl'] = [
-                CURLOPT_PROXY     => ($parsed['host'] ?? '127.0.0.1') . ':' . ($parsed['port'] ?? 1080),
-                // SOCKS5_HOSTNAME = resolve DNS through the proxy. Plain SOCKS5
-                // resolves locally, which fails where DNS itself is blocked.
-                CURLOPT_PROXYTYPE => CURLPROXY_SOCKS5_HOSTNAME,
-            ];
+            $curl[CURLOPT_PROXY] = ($parsed['host'] ?? '127.0.0.1') . ':' . ($parsed['port'] ?? 1080);
+            // SOCKS5_HOSTNAME = resolve DNS through the proxy. Plain SOCKS5
+            // resolves locally, which fails where DNS itself is blocked.
+            $curl[CURLOPT_PROXYTYPE] = CURLPROXY_SOCKS5_HOSTNAME;
         }
 
-        $guzzle    = new GuzzleClient($config);
+        // 'connection' keep-alive header + a persistent Guzzle client (one per
+        // token, cached by the factory) let cURL reuse the same connection.
+        $guzzle = new GuzzleClient([
+            'timeout'     => 30.0,
+            'curl'        => $curl,
+            'headers'     => ['Connection' => 'keep-alive'],
+        ]);
         $this->api = new Api($token, false, new GuzzleHttpClient($guzzle));
     }
 
